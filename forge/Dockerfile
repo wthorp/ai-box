@@ -14,7 +14,11 @@ RUN apk add --no-cache git
 WORKDIR /app
 RUN git clone --depth=1 https://github.com/antoinezambelli/forge.git . \
     && uv sync --extra anthropic --no-dev \
-    && echo 'MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-UD-Q4_K_XL"] = MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-Q4_K_M"]' \
+    && printf '%s\n' \
+       'MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-UD-Q4_K_XL"] = MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-Q4_K_M"]' \
+       'MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-UD-Q5_K_XL"] = MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-Q4_K_M"]' \
+       'MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-UD-Q6_K_XL"] = MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-Q4_K_M"]' \
+       'MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-UD-Q8_K_XL"] = MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-Q4_K_M"]' \
        >> src/forge/clients/sampling_defaults.py
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
