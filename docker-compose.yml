@@ -73,10 +73,8 @@ services:
       turboquant:
         condition: service_healthy
 
-    # ── Eval results volume ──────────────────────────────────────────────────
-    # docker compose run --rm forge python -m tests.eval.batch_eval ... writes
-    # JSONL here; the host directory is created automatically by Docker.
     volumes:
+      - ${MODELS_DIR:-/data/ai/models}:/models:ro
       - ${EVAL_RESULTS_DIR:-./eval-results}:/app/eval-results
 
     restart: unless-stopped
