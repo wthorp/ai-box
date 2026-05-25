@@ -8,6 +8,7 @@ One bootstrap script sets up the host; Docker Compose runs the services.
 | Service | Description |
 |---------|-------------|
 | `turboquant` | llama.cpp fork with turbo KV-cache quantisation (`turbo2/3/4`) and `--n-cpu-moe` for MoE CPU offload |
+| `forge` | Guardrails proxy (port 8081) — tool-call rescue parsing, retry logic, step enforcement, context compaction |
 
 ## Prerequisites
 
@@ -56,7 +57,38 @@ curl http://localhost:8080/health
 docker compose logs -f turboquant
 ```
 
-## 4 — Adding future services
+## 4 — Forge proxy and eval harness
+
+Forge sits between clients and turboquant, adding tool-call rescue parsing, retry logic, and context compaction. Point clients at **port 8081** instead of 8080:
+
+```
+client → forge :8081 → turboquant :8080
+```
+
+### Running evals
+
+Forge's eval runners live in `tests/eval/` (not installed as CLI entry points). Results are written to `./eval-results/` on the host via the volume mount.
+
+```bash
+# Full batch eval — 30 scenarios, 10 runs each (~20 min)
+docker compose run --rm forge \
+  python -m tests.eval.batch_eval \
+  --config llamaserver \
+  --runs 10 \
+  --output /app/eval-results/results.jsonl
+
+# Quick smoke test — plumbing scenarios only, 3 runs each
+docker compose run --rm forge \
+  python -m tests.eval.eval_runner \
+  --backend llamafile \
+  --runs 3 --tags plumbing --verbose
+```
+
+### Why a separate Dockerfile
+
+Forge is Alpine + Python (~100 MB) and CPU-only; turboquant is Ubuntu + CUDA (~3 GB) and GPU-bound. Combining them would require a process supervisor, gain nothing, and couple their release cycles. With `network_mode: host` on both services, localhost calls between port 8081 and 8080 have zero Docker overhead.
+
+## 5 — Adding future services
 
 Add a new directory (e.g. `ollama/`, `vllm/`) with its own `Dockerfile`, then
 add a service block to `docker-compose.yml`. Commit when stable.

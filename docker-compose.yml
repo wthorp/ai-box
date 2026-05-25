@@ -52,6 +52,7 @@ services:
       -c ${CONTEXT_SIZE:-8192}
       --host 0.0.0.0
       --port 8080
+      --jinja
 
     restart: unless-stopped
 
@@ -61,3 +62,29 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+
+  forge:
+    build: ./forge
+    image: ai-box-forge:latest
+
+    network_mode: host
+
+    depends_on:
+      turboquant:
+        condition: service_healthy
+
+    # ── Eval results volume ──────────────────────────────────────────────────
+    # docker compose run --rm forge python -m tests.eval.batch_eval ... writes
+    # JSONL here; the host directory is created automatically by Docker.
+    volumes:
+      - ${EVAL_RESULTS_DIR:-./eval-results}:/app/eval-results
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
+             "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
