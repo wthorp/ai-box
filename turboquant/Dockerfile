@@ -29,12 +29,19 @@ RUN git clone --depth=1 \
 #   86 = Ampere  (RTX 3090 / 3080)
 #   89 = Ada     (RTX 40xx)
 #   90 = Hopper  (H100)
+#
+# BUILD_SHARED_LIBS=OFF: produces a self-contained static binary — no need
+# to copy libggml-*.so files into the runtime image.
+# GGML_CUDA_NO_VMM=ON: disables CUDA virtual memory management, eliminating
+# the libcuda.so driver dependency at build time (no GPU in Docker builder).
 RUN cmake -B build -G Ninja \
         -DGGML_CUDA=ON \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" \
         -DLLAMA_BUILD_TESTS=OFF \
         -DLLAMA_BUILD_EXAMPLES=OFF \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DGGML_CUDA_NO_VMM=ON \
     && cmake --build build --target llama-server -j$(nproc)
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
@@ -47,7 +54,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build/build/bin/llama-server /usr/local/bin/llama-server
+COPY --from=builder /build/build/bin/ /usr/local/lib/turboquant/
+RUN ln -s /usr/local/lib/turboquant/llama-server /usr/local/bin/llama-server \
+    && echo "/usr/local/lib/turboquant" > /etc/ld.so.conf.d/turboquant.conf \
+    && ldconfig
 
 # Reduce glibc malloc arena count — limits fragmentation in long-running servers.
 # DO NOT set LD_PRELOAD=jemalloc or OMP_WAIT_POLICY=passive here:

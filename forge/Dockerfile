@@ -13,7 +13,9 @@ ENV UV_LINK_MODE=copy
 RUN apk add --no-cache git
 WORKDIR /app
 RUN git clone --depth=1 https://github.com/antoinezambelli/forge.git . \
-    && uv sync --extra anthropic --no-dev
+    && uv sync --extra anthropic --no-dev \
+    && echo 'MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-UD-Q4_K_XL"] = MODEL_SAMPLING_DEFAULTS["Qwen3-Coder-Next-Q4_K_M"]' \
+       >> src/forge/clients/sampling_defaults.py
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM python:3.13-alpine3.23

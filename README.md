@@ -70,22 +70,21 @@ client → forge :8081 → turboquant :8080
 Forge's eval runner lives in `tests/eval/eval_runner.py` (not an installed CLI entry point). Use `--base-url` to point it at the already-running turboquant server; results are written to `./eval-results/` via the volume mount.
 
 ```bash
-# Run all scenarios against turboquant (replace MODEL_FILE with your .gguf filename)
-docker compose run --rm forge \
-  python -m tests.eval.eval_runner \
-  --backend llamafile \
-  --base-url http://localhost:8080/v1 \
-  --gguf /models/${MODEL_FILE} \
-  --runs 10 \
-  --output /app/eval-results/results.jsonl
-
-# Quick smoke test — plumbing scenarios only
-docker compose run --rm forge \
+# Quick smoke test — plumbing scenarios, 3 runs each
+docker compose run --rm --no-deps forge \
   python -m tests.eval.eval_runner \
   --backend llamafile \
   --base-url http://localhost:8080/v1 \
   --gguf /models/${MODEL_FILE} \
   --runs 3 --tags plumbing --verbose
+
+# Full plumbing eval, 10 runs each
+docker compose run --rm --no-deps forge \
+  python -m tests.eval.eval_runner \
+  --backend llamafile \
+  --base-url http://localhost:8080/v1 \
+  --gguf /models/${MODEL_FILE} \
+  --runs 10
 ```
 
 Note: `batch_eval.py` is not usable with this setup — it manages its own llama-server subprocess lifecycle and has no flag to connect to a running server.
