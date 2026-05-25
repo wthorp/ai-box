@@ -24,6 +24,16 @@ services:
       stack: 67108864       # 64 MB stack — headroom for deep CUDA call stacks
 
     # ── GPU ─────────────────────────────────────────────────────────────────
+    # deploy.resources requests the GPU explicitly — required when the default
+    # Docker runtime is runc (not nvidia). NVIDIA_VISIBLE_DEVICES is still set
+    # for the NVIDIA runtime to honour capability selection.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     environment:
       - MALLOC_ARENA_MAX=2
       - NVIDIA_VISIBLE_DEVICES=all
