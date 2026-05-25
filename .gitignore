@@ -1,0 +1,7 @@
+# Local environment — never commit secrets or paths
+.env
+
+# Model files
+*.gguf
+*.ggml
+models/

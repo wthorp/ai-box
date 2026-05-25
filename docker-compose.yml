@@ -1,0 +1,63 @@
+services:
+  turboquant:
+    build: ./turboquant
+    image: ai-box-turboquant:latest
+
+    # ── Performance: network / IPC ──────────────────────────────────────────
+    # host networking eliminates NAT overhead; required because network_mode:host
+    # is incompatible with ports: mappings — the server port is set in command.
+    network_mode: host
+    # Share host IPC namespace for CUDA inter-process memory (peer access).
+    ipc: host
+
+    # ── Performance: capabilities / syscall filter ──────────────────────────
+    cap_add:
+      - SYS_NICE          # lets CUDA set thread scheduling priorities
+    security_opt:
+      - seccomp:unconfined  # removes syscall filter; measured neutral→positive
+
+    # ── Performance: resource limits ───────────────────────────────────────
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1            # required for --mlock to pin model weights in RAM
+      stack: 67108864       # 64 MB stack — headroom for deep CUDA call stacks
+
+    # ── GPU ─────────────────────────────────────────────────────────────────
+    environment:
+      - MALLOC_ARENA_MAX=2
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+    # ── Model volume ────────────────────────────────────────────────────────
+    volumes:
+      - ${MODELS_DIR:-/data/ai/models}:/models:ro
+
+    # ── Server command ──────────────────────────────────────────────────────
+    # Flags reference (turboquant extensions marked *):
+    #   -ngl 999              offload all layers to GPU
+    #   --no-mmap             load model directly into RAM (not memory-mapped)
+    #   --mlock               lock model weights in RAM, prevent paging
+    #   --n-cpu-moe N     *   keep first N MoE expert layers on CPU
+    #   --cache-type-k/v  *   turboquant quantised KV cache (turbo2/3/4)
+    #   -c                    context window size
+    command: >
+      -m /models/${MODEL_FILE:-model.gguf}
+      -ngl 999
+      --no-mmap
+      --mlock
+      --n-cpu-moe ${CPU_MOE_LAYERS:-35}
+      --cache-type-k turbo4
+      --cache-type-v turbo3
+      -c ${CONTEXT_SIZE:-8192}
+      --host 0.0.0.0
+      --port 8080
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
