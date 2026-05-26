@@ -25,7 +25,7 @@ BENCH_EDIT_FORMAT="${BENCH_EDIT_FORMAT:-whole}"
 
 mkdir -p "$RESULTS_DIR"
 
-log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "${RESULTS_DIR}/run.log"; }
+log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "${RESULTS_DIR}/run.log" >&2; }
 
 # ── Download all parts of a multi-shard GGUF ─────────────────────────────────
 download_quant() {
