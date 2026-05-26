@@ -13,7 +13,7 @@ set -euo pipefail
 MODELS_DIR=/data/ai/models
 AI_BOX="$(cd "$(dirname "$0")" && pwd)"
 HF_BASE="https://huggingface.co/unsloth/Qwen3-Coder-Next-GGUF/resolve/main"
-RESULTS_DIR="${AI_BOX}/eval-results/multi-quant-$(date +%Y%m%d-%H%M%S)"
+RESULTS_DIR="${BENCH_RESULTS_DIR:-/data/ai/local/eval-results}/multi-quant-$(date +%Y%m%d-%H%M%S)"
 ORIGINAL_MODEL="Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
 ORIGINAL_CTX=8192
 NPARTS=3
