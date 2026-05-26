@@ -132,9 +132,6 @@ log "=== Multi-quant Aider benchmark starting ==="
 log "Results → $RESULTS_DIR"
 log "Languages: $BENCH_LANGUAGES | threads: $BENCH_THREADS | edit-format: $BENCH_EDIT_FORMAT"
 
-# Stop forge (not needed; bench talks directly to turboquant)
-(cd "$AI_BOX" && docker compose stop forge) > /dev/null 2>&1 || true
-
 # Kick off first download immediately
 download_quant "${QUANTS[0]}" &
 DL_PID=$!

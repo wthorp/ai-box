@@ -73,30 +73,6 @@ services:
       retries: 3
       start_period: 120s
 
-  forge:
-    build: ./forge
-    image: ai-box-forge:latest
-
-    network_mode: host
-
-    depends_on:
-      turboquant:
-        condition: service_healthy
-
-    volumes:
-      - ${MODELS_DIR:-/data/ai/models}:/models:ro
-      - ${EVAL_RESULTS_DIR:-./eval-results}:/app/eval-results
-
-    restart: unless-stopped
-
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
-             "http://localhost:8081/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
   bench:
     build: ./bench
     image: ai-box-bench:latest
