@@ -18,7 +18,7 @@ Reference machine used for development and benchmarking:
 | Component | Spec |
 |-----------|------|
 | **CPU** | AMD Ryzen 9 7950X (16c/32t, up to 5.88 GHz) |
-| **RAM** | 92 GB |
+| **RAM** | 96 GB (2× 48 GB) |
 | **GPU** | NVIDIA GeForce RTX 3090 (24 GB VRAM, compute 8.6) |
 | **Storage** | Samsung SSD 990 PRO 4 TB NVMe |
 | **OS** | Ubuntu 26.04 LTS, kernel 7.0.0-15, NVIDIA driver 595.71.05 |
