@@ -23,14 +23,16 @@ SERVER_LIST="turboquant,rotorquant"
 NUM_TESTS=20
 LANGUAGES="python,go"
 THREADS=4
+RESUME_DIR=""   # set to an existing results dir to skip already-completed combos
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --quants)    QUANT_LIST="$2";  shift 2 ;;
-    --servers)   SERVER_LIST="$2"; shift 2 ;;
-    --num-tests) NUM_TESTS="$2";   shift 2 ;;
-    --languages) LANGUAGES="$2";   shift 2 ;;
-    --threads)   THREADS="$2";     shift 2 ;;
+    --quants)     QUANT_LIST="$2";  shift 2 ;;
+    --servers)    SERVER_LIST="$2"; shift 2 ;;
+    --num-tests)  NUM_TESTS="$2";   shift 2 ;;
+    --languages)  LANGUAGES="$2";   shift 2 ;;
+    --threads)    THREADS="$2";     shift 2 ;;
+    --resume)     RESUME_DIR="$2";  shift 2 ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
@@ -121,7 +123,8 @@ run_bench() {
   log "Bench: $label (ctx=$ctx, tests=$NUM_TESTS, langs=$LANGUAGES)"
   {
     echo "=== $label  ctx=$ctx  $(date) ==="
-    (cd "$AI_BOX" && docker compose --profile rotorquant run --rm --no-deps \
+    # timeout 7200: kills a hung bench container instead of blocking forever
+    (cd "$AI_BOX" && timeout 7200 docker compose --profile rotorquant run --rm --no-deps \
       -e OPENAI_API_BASE="http://localhost:${port}/v1" \
       bench \
       "$run_name" \
@@ -132,7 +135,7 @@ run_bench() {
       --threads "$THREADS" \
       --num-ctx "$ctx" \
       --num-tests "$NUM_TESTS" \
-      2>&1)
+      2>&1) || true
   } | tee "$out"
   log "Done: $label → $out"
 }
@@ -160,9 +163,24 @@ log "=== compare_bench starting ==="
 log "Quants: ${QUANTS[*]} | Servers: ${SERVERS[*]}"
 log "num-tests: $NUM_TESTS | languages: $LANGUAGES | threads: $THREADS"
 log "Results → $RESULTS_DIR"
+[[ -n "$RESUME_DIR" ]] && log "Resuming from: $RESUME_DIR"
 
 # Declare result arrays (bash 4+)
 declare -A RESULT_CTX RESULT_VRAM RESULT_PASS RESULT_SPC
+
+# Pre-load any results from a prior run (--resume)
+if [[ -n "$RESUME_DIR" ]]; then
+  for f in "${RESUME_DIR}"/*.txt; do
+    [[ -f "$f" ]] || continue
+    k=$(basename "$f" .txt)
+    RESULT_PASS[$k]=$(extract_pass_rate "$f")
+    RESULT_SPC[$k]=$(extract_secs_per_case "$f")
+    ctx=$(grep "ctx=" "$f" | head -1 | grep -oP 'ctx=\K[0-9]+' || echo "")
+    RESULT_CTX[$k]="${ctx}"
+    log "Loaded prior result: $k (pass_rate=${RESULT_PASS[$k]:-?})"
+    cp "$f" "${RESULTS_DIR}/" 2>/dev/null || true
+  done
+fi
 
 stop_servers
 
@@ -175,6 +193,17 @@ for quant in "${QUANTS[@]}"; do
 
   for server in "${SERVERS[@]}"; do
     key="${quant}-${server}"
+
+    # Skip if already done (from --resume or earlier in this run)
+    if [[ -f "${RESULTS_DIR}/${key}.txt" ]] && grep -q "pass_rate_1:" "${RESULTS_DIR}/${key}.txt" 2>/dev/null; then
+      log "SKIP $key — results already present"
+      RESULT_PASS[$key]=$(extract_pass_rate "${RESULTS_DIR}/${key}.txt")
+      RESULT_SPC[$key]=$(extract_secs_per_case "${RESULTS_DIR}/${key}.txt")
+      ctx=$(grep "ctx=" "${RESULTS_DIR}/${key}.txt" | head -1 | grep -oP 'ctx=\K[0-9]+' || echo "")
+      RESULT_CTX[$key]="${ctx}"
+      continue
+    fi
+
     log "=== $key ==="
     stop_servers
 
