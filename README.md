@@ -11,6 +11,20 @@ One bootstrap script sets up the host; Docker Compose runs the services.
 | `rotorquant` | llama.cpp fork with planar/iso KV-cache compression (28% faster decode, better perplexity than turbo) — opt-in via `--profile rotorquant` |
 | `bench` | [Aider polyglot benchmark](https://github.com/Aider-AI/polyglot-benchmark) runner — measures code-editing accuracy across Python, Go, Rust, JavaScript (225 exercises from Exercism) |
 
+## Hardware
+
+Reference machine used for development and benchmarking:
+
+| Component | Spec |
+|-----------|------|
+| **CPU** | AMD Ryzen 9 7950X (16c/32t, up to 5.88 GHz) |
+| **RAM** | 92 GB |
+| **GPU** | NVIDIA GeForce RTX 3090 (24 GB VRAM, compute 8.6) |
+| **Storage** | Samsung SSD 990 PRO 4 TB NVMe |
+| **OS** | Ubuntu 26.04 LTS, kernel 7.0.0-15, NVIDIA driver 595.71.05 |
+
+The `--n-cpu-moe 35` default keeps 35 MoE expert layers on the Ryzen 9's 32 threads while the attention layers run on the RTX 3090. Adjust `CPU_MOE_LAYERS` to taste for different CPU/GPU combinations.
+
 ## Prerequisites
 
 - Ubuntu 26.04 LTS (fresh install)
