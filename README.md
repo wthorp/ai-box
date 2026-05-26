@@ -8,6 +8,7 @@ One bootstrap script sets up the host; Docker Compose runs the services.
 | Service | Description |
 |---------|-------------|
 | `turboquant` | llama.cpp fork with turbo KV-cache quantisation (`turbo2/3/4`) and `--n-cpu-moe` for MoE CPU offload |
+| `rotorquant` | llama.cpp fork with planar/iso KV-cache compression (28% faster decode, better perplexity than turbo) — opt-in via `--profile rotorquant` |
 | `bench` | [Aider polyglot benchmark](https://github.com/Aider-AI/polyglot-benchmark) runner — measures code-editing accuracy across Python, Go, Rust, JavaScript (225 exercises from Exercism) |
 
 ## Prerequisites
@@ -90,13 +91,45 @@ The `--model openai/local` value is arbitrary — turboquant serves whatever mod
 
 Aider may default to a small context for unknown models. Pass `--openai-api-base` or set `OPENAI_API_BASE` (already in the compose environment) and optionally add `--set-context-window 32768` if you want to override the default.
 
+### Smoke test
+
+`smoke_bench.sh` runs 20 exercises across Python+Go at max context — completes in ~20 min. Use it to quickly validate a model or compare two servers:
+
+```bash
+# Quick check against turboquant (default)
+./smoke_bench.sh
+
+# Compare rotorquant
+./smoke_bench.sh --server rotorquant
+
+# Custom label
+./smoke_bench.sh --model q5-xl --port 8080
+```
+
 ### Multi-quant comparison
 
 See `multi_quant_eval.sh` in the repo root for an automated pipeline that downloads Q5/Q6/Q8 UD variants, probes the max context per quant, and runs the benchmark on each.
 
+## 5 — rotorquant
+
+rotorquant ([scrya-com/rotorquant](https://github.com/scrya-com/rotorquant)) is a llama.cpp fork built on turboquant that replaces WHT-based KV cache compression with block-diagonal rotations:
+
+- `planar3/4` — 2D Givens rotations
+- `iso3/4` — 4D quaternion rotations
+
+Benchmarked at 28% faster decode and better perplexity than turbo equivalents. Runs on port 8082 and is opt-in via Docker Compose profiles.
+
+```bash
+# Build and start rotorquant alongside turboquant
+docker compose --profile rotorquant up -d rotorquant
+
+# Smoke test against rotorquant
+./smoke_bench.sh --server rotorquant
+```
+
 ---
 
-## 5 — Adding future services
+## 6 — Adding future services
 
 Add a new directory (e.g. `ollama/`, `vllm/`) with its own `Dockerfile`, then
 add a service block to `docker-compose.yml`. Commit when stable.
