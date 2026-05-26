@@ -23,7 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 RUN git clone --depth=1 \
     -b feature/planarquant-kv-cache \
-    https://github.com/johndpope/llama-cpp-turboquant.git .
+    https://github.com/johndpope/llama-cpp-turboquant.git . \
+    && sed -i 's/extern "C" GGML_API int turbo3_cpu_wht_group_size/GGML_API int turbo3_cpu_wht_group_size/' \
+       ggml/src/ggml-cpu/ops.cpp
 
 RUN cmake -B build -G Ninja \
         -DGGML_CUDA=ON \
