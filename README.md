@@ -9,6 +9,7 @@ One bootstrap script sets up the host; Docker Compose runs the services.
 |---------|-------------|
 | `turboquant` | llama.cpp fork with turbo KV-cache quantisation (`turbo2/3/4`) and `--n-cpu-moe` for MoE CPU offload |
 | `forge` | Guardrails proxy (port 8081) — tool-call rescue parsing, retry logic, step enforcement, context compaction |
+| `bench` | [Aider polyglot benchmark](https://github.com/Aider-AI/polyglot-benchmark) runner — measures code-editing accuracy across Python, Go, Rust, JavaScript (225 exercises from Exercism) |
 
 ## Prerequisites
 
@@ -93,7 +94,46 @@ Note: `batch_eval.py` is not usable with this setup — it manages its own llama
 
 Forge is Alpine + Python (~100 MB) and CPU-only; turboquant is Ubuntu + CUDA (~3 GB) and GPU-bound. Combining them would require a process supervisor, gain nothing, and couple their release cycles. With `network_mode: host` on both services, localhost calls between port 8081 and 8080 have zero Docker overhead.
 
-## 5 — Adding future services
+## 5 — Aider polyglot benchmark
+
+`bench` runs the [Aider polyglot benchmark](https://github.com/Aider-AI/polyglot-benchmark) — 225 Exercism exercises across Python, Go, Rust, and JavaScript. Each exercise gives the model failing tests and asks it to edit the code until they pass.
+
+> **Note:** TypeScript is not in the polyglot benchmark; JavaScript covers that slot.
+
+### Running the benchmark
+
+```bash
+# Quick check — Python only, first 10 exercises
+docker compose run --rm bench smoke-test \
+  --model openai/local \
+  --exercises-dir /bench/exercises \
+  --languages python \
+  --threads 1
+
+# Full 4-language run against the loaded model
+docker compose run --rm bench q4-baseline \
+  --model openai/local \
+  --exercises-dir /bench/exercises \
+  --languages python,go,rust,javascript \
+  --edit-format whole \
+  --threads 1
+
+# Results land in EVAL_RESULTS_DIR/<run-name>/
+```
+
+The `--model openai/local` value is arbitrary — turboquant serves whatever model is loaded regardless of the name in the request. Use a descriptive name (e.g. `openai/q5-xl`) to keep results organised.
+
+### Context window
+
+Aider may default to a small context for unknown models. Pass `--openai-api-base` or set `OPENAI_API_BASE` (already in the compose environment) and optionally add `--set-context-window 32768` if you want to override the default.
+
+### Multi-quant comparison
+
+See `multi_quant_eval.sh` in the repo root for an automated pipeline that downloads Q5/Q6/Q8 UD variants, probes the max context per quant, and runs the benchmark on each.
+
+---
+
+## 6 — Adding future services
 
 Add a new directory (e.g. `ollama/`, `vllm/`) with its own `Dockerfile`, then
 add a service block to `docker-compose.yml`. Commit when stable.
