@@ -2,7 +2,8 @@
 # Multi-stage build: compile rotorquant (llama.cpp fork with planar/iso KV
 # cache compression) then copy into a slim CUDA runtime image.
 #
-# Source: https://github.com/scrya-com/rotorquant
+# Source: https://github.com/johndpope/llama-cpp-turboquant
+# Branch: feature/planarquant-kv-cache
 # Adds planar3/planar4 (2D Givens) and iso3/iso4 (quaternion) KV cache
 # compression — faster decode and better perplexity than turbo3/turbo4.
 # Inherits --n-cpu-moe for MoE expert CPU offload from turboquant base.
@@ -21,7 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 RUN git clone --depth=1 \
-    https://github.com/scrya-com/rotorquant.git .
+    -b feature/planarquant-kv-cache \
+    https://github.com/johndpope/llama-cpp-turboquant.git .
 
 RUN cmake -B build -G Ninja \
         -DGGML_CUDA=ON \
