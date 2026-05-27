@@ -10,7 +10,7 @@ cd /data/ai/ai-box
 # Ensure turboquant is down, rotorquant is up
 echo "Stopping turboquant, starting rotorquant..."
 docker compose stop turboquant 2>/dev/null || true
-docker compose up -d rotorquant 2>/dev/null || true
+/data/ai/ai-box/start.sh rotorquant
 
 # Wait for rotorquant to be healthy
 echo "Waiting for rotorquant to be ready..."
@@ -40,4 +40,4 @@ echo "rotorquant TB2.0 run complete!"
 # Restore turboquant
 echo "Restoring turboquant..."
 docker compose stop rotorquant 2>/dev/null || true
-docker compose up -d turboquant 2>/dev/null || true
+/data/ai/ai-box/start.sh turboquant
