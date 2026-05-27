@@ -5,3 +5,7 @@
 *.gguf
 *.ggml
 models/
+
+# Benchmark results and logs (large, machine-specific)
+jobs/
+*.log

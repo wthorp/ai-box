@@ -1,0 +1,7 @@
+services:
+  main:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - /home/bill/.local/share/uv/python:/root/.local/share/uv/python:ro
+      - /data/ai/ai-box/apt-proxy.conf:/etc/apt/apt.conf.d/01proxy:ro
