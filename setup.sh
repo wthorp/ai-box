@@ -18,15 +18,16 @@ if [[ "$ID" != "ubuntu" || "$VERSION_ID" != "26.04" ]]; then
   echo "WARNING: tested on Ubuntu 26.04 — detected $PRETTY_NAME. Proceeding anyway."
 fi
 
-echo "==> [1/7] System update"
+echo "==> [1/8] System update"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get upgrade -y -q
 apt-get install -y -q --no-install-recommends \
-  curl gnupg ca-certificates software-properties-common
+  curl gnupg ca-certificates software-properties-common \
+  nvtop iotop numactl linux-tools-common linux-tools-generic
 
 # ── Docker ───────────────────────────────────────────────────────────────────
-echo "==> [2/7] Docker"
+echo "==> [2/8] Docker"
 if ! command -v docker &>/dev/null; then
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
@@ -58,11 +59,11 @@ if [[ -n "${SUDO_USER:-}" ]]; then
 fi
 
 # ── NVIDIA driver utils ───────────────────────────────────────────────────────
-echo "==> [3/7] NVIDIA driver utils (nvidia-utils-595-server)"
+echo "==> [3/8] NVIDIA driver utils (nvidia-utils-595-server)"
 apt-get install -y -q nvidia-utils-595-server
 
 # ── CUDA toolkit ─────────────────────────────────────────────────────────────
-echo "==> [4/7] CUDA toolkit 13.1"
+echo "==> [4/8] CUDA toolkit 13.1"
 if [[ ! -f /etc/apt/sources.list.d/cuda.list ]]; then
   curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub \
     | gpg --dearmor -o /usr/share/keyrings/cuda-archive-keyring.gpg
@@ -74,7 +75,7 @@ fi
 apt-get install -y -q cuda-toolkit-13-1
 
 # ── NVIDIA Container Toolkit ─────────────────────────────────────────────────
-echo "==> [5/7] NVIDIA Container Toolkit"
+echo "==> [5/8] NVIDIA Container Toolkit"
 if ! command -v nvidia-ctk &>/dev/null; then
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
     | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
@@ -87,21 +88,40 @@ else
   echo "    nvidia-ctk already installed, skipping."
 fi
 
-echo "==> [6/7] Configure Docker NVIDIA runtime and CDI"
+echo "==> [6/8] Configure Docker NVIDIA runtime and CDI"
 nvidia-ctk runtime configure --runtime=docker
 nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
 systemctl restart docker
 
 # ── OS-level performance tuning ───────────────────────────────────────────────
-echo "==> [7/7] OS tuning"
+echo "==> [7/8] OS tuning (MoE inference checklist)"
+grep -q 'memlock unlimited' /etc/security/limits.conf 2>/dev/null || cat >> /etc/security/limits.conf <<'EOF'
+# ai-box: allow --mlock for llama-server (host or container with IPC_LOCK)
+* soft memlock unlimited
+* hard memlock unlimited
+EOF
+
 cat > /etc/sysctl.d/99-ai-box.conf <<'EOF'
-# Reduce swap pressure — keep model weights in RAM
-vm.swappiness = 10
-# Larger dirty page writeback window — less I/O jitter during inference
-vm.dirty_ratio = 20
+# Keep weights/KV in RAM — minimize swap during inference
+vm.swappiness = 1
+vm.vfs_cache_pressure = 50
+vm.dirty_ratio = 10
 vm.dirty_background_ratio = 5
 EOF
 sysctl -p /etc/sysctl.d/99-ai-box.conf
+
+# CPU governor: performance (best-effort; ignored if unsupported)
+if command -v cpupower &>/dev/null; then
+  cpupower frequency-set -g performance 2>/dev/null || true
+fi
+
+# Optional: disable swap on dedicated inference boxes (skipped by default — can break desktops)
+# swapoff -a
+
+echo "==> [8/8] Verify RAM / NUMA"
+free -h || true
+swapon --show 2>/dev/null || true
+numactl --hardware 2>/dev/null | head -15 || true
 
 # ── done ─────────────────────────────────────────────────────────────────────
 echo ""

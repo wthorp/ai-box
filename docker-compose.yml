@@ -1,59 +1,46 @@
+# Shared inference tuning (MoE checklist: mlock, no-mmap, KV quant, CUDA env)
+x-inference-performance: &inference-performance
+  network_mode: host
+  ipc: host
+  cap_add:
+    - SYS_NICE
+    - IPC_LOCK
+  security_opt:
+    - seccomp:unconfined
+  ulimits:
+    memlock:
+      soft: -1
+      hard: -1
+    stack: 67108864
+  mem_limit: ${INFERENCE_MEMORY_LIMIT:-88g}
+  memswap_limit: ${INFERENCE_MEMORY_SWAP_LIMIT:-88g}
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+  environment:
+    - MALLOC_ARENA_MAX=2
+    - NVIDIA_VISIBLE_DEVICES=all
+    - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    - CUDA_DEVICE_MAX_CONNECTIONS=1
+    - GGML_CUDA_FORCE_MMQ=1
+
 services:
   turboquant:
     build: ./turboquant
     image: ai-box-turboquant:latest
+    <<: *inference-performance
 
-    # ── Performance: network / IPC ──────────────────────────────────────────
-    # host networking eliminates NAT overhead; required because network_mode:host
-    # is incompatible with ports: mappings — the server port is set in command.
-    network_mode: host
-    # Share host IPC namespace for CUDA inter-process memory (peer access).
-    ipc: host
-
-    # ── Performance: capabilities / syscall filter ──────────────────────────
-    cap_add:
-      - SYS_NICE          # lets CUDA set thread scheduling priorities
-    security_opt:
-      - seccomp:unconfined  # removes syscall filter; measured neutral→positive
-
-    # ── Performance: resource limits ───────────────────────────────────────
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1            # required for --mlock to pin model weights in RAM
-      stack: 67108864       # 64 MB stack — headroom for deep CUDA call stacks
-
-    # ── GPU ─────────────────────────────────────────────────────────────────
-    # deploy.resources requests the GPU explicitly — required when the default
-    # Docker runtime is runc (not nvidia). NVIDIA_VISIBLE_DEVICES is still set
-    # for the NVIDIA runtime to honour capability selection.
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - MALLOC_ARENA_MAX=2
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-
-    # ── Model volume ────────────────────────────────────────────────────────
     volumes:
       - ${MODELS_DIR:-/data/ai/models}:/models:ro
 
-    # ── Server command ──────────────────────────────────────────────────────
-    # Flags reference (turboquant extensions marked *):
-    #   -ngl 999              offload all layers to GPU
-    #   --no-mmap             load model directly into RAM (not memory-mapped)
-    #   --mlock               lock model weights in RAM, prevent paging
-    #   --n-cpu-moe N     *   keep first N MoE expert layers on CPU
-    #   --cache-type-k/v  *   turboquant quantised KV cache (turbo2/3/4)
-    #   -c                    context window size
     command: >
       -m /models/${MODEL_FILE:-model.gguf}
       -ngl 999
+      --fit off
       --no-mmap
       --mlock
       --n-cpu-moe ${CPU_MOE_LAYERS:-35}
@@ -64,54 +51,29 @@ services:
       --port 8080
       --jinja
 
+    # Autostart the server after host reboots. Memory/swap limits above keep a
+    # bad model/context/MoE combination from taking the host down with it.
     restart: unless-stopped
 
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 120s
+      retries: 10
+      start_period: 900s
 
   rotorquant:
     build: ./rotorquant
     image: ai-box-rotorquant:latest
-
-    network_mode: host
-    ipc: host
-
-    cap_add:
-      - SYS_NICE
-    security_opt:
-      - seccomp:unconfined
-
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      stack: 67108864
-
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - MALLOC_ARENA_MAX=2
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    <<: *inference-performance
 
     volumes:
       - ${MODELS_DIR:-/data/ai/models}:/models:ro
 
-    # Flags: same as turboquant but planar4/planar3 KV cache instead of turbo4/turbo3.
-    # planar4 = 2D Givens rotation (K cache), planar3 = V cache
-    # 28% faster decode and better perplexity than turbo equivalents.
     command: >
       -m /models/${MODEL_FILE:-model.gguf}
       -ngl 999
+      --fit off
       --no-mmap
       --mlock
       --n-cpu-moe ${CPU_MOE_LAYERS:-35}
@@ -125,18 +87,22 @@ services:
     profiles:
       - rotorquant
 
+    # Autostart the server after host reboots when the rotorquant profile is used.
+    # Memory/swap limits above keep bad model settings contained.
     restart: unless-stopped
 
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8082/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 120s
+      retries: 10
+      start_period: 900s
 
   bench:
     build: ./bench
     image: ai-box-bench:latest
+    profiles:
+      - tools
 
     network_mode: host
 
@@ -157,3 +123,38 @@ services:
     #   docker compose run --rm bench q4-baseline \
     #     --model openai/local --languages python,go,rust,javascript \
     #     --edit-format whole --threads 1
+
+  runner:
+    build: ./runner
+    image: ai-box-runner:latest
+    profiles:
+      - tools
+
+    network_mode: host
+
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${MODELS_DIR:-/data/ai/models}:/models:ro
+      - ${DEEPSWE_DIR:-/data/ai/deep-swe}:/deep-swe:ro
+      - ${EVAL_RESULTS_DIR:-./eval-results}:/eval-results
+      - ${UV_PYTHON_CACHE_DIR:-${HOME}/.local/share/uv/python}:/root/.local/share/uv/python:ro
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+      - /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.595.71.05:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro
+    devices:
+      - /dev/nvidiactl
+      - /dev/nvidia-uvm
+      - /dev/nvidia0
+
+    working_dir: /workspace
+
+    environment:
+      - AI_BOX=/workspace
+      - AI_BOX_RUNNER=1
+      - COMPOSE_PROJECT_NAME=ai-box
+      # Do not set MODELS_DIR here — it breaks nested `docker compose` volume paths on the host.
+      - EVAL_RESULTS_DIR=/eval-results
+      - DEEPSWE_DIR=/deep-swe
+      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
+
+    # Usage: docker compose run --rm runner scripts/light_tune.sh
