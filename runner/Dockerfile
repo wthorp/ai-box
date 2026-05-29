@@ -1,10 +1,10 @@
 # runner/Dockerfile
-# Orchestration image: docker compose, harbor (Terminal-Bench), wget, nvidia-smi.
-# Mount /var/run/docker.sock to control turboquant/rotorquant/bench on the host.
+# Orchestration image: docker compose, wget, nvidia-smi, DeepSWE/Pier.
+# Mount /var/run/docker.sock to control turboquant/rotorquant on the host.
 #
 # Usage (from repo root):
-#   docker compose run --rm runner scripts/smoke_bench.sh
-#   ./smoke_bench.sh   # thin wrapper → scripts/ → runner container
+#   docker compose run --rm runner scripts/deepswe-run.sh
+#   ./deepswe-run.sh   # thin wrapper → scripts/ → runner container
 
 FROM ubuntu:24.04
 
@@ -20,9 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         docker.io docker-compose-v2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Terminal-Bench / DeepSWE harnesses (pinned Harbor, current Pier)
+# DeepSWE harness
 RUN python3 -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir "harbor==0.8.0" "datacurve-pier"
+    && /opt/venv/bin/pip install --no-cache-dir "datacurve-pier"
 
 WORKDIR /workspace
 

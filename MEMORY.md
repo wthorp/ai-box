@@ -34,20 +34,10 @@ Paths are defined in `scripts/lib/models.sh`.
 
 ## Tuning methodology
 
-1. **Per-MoE max context** — `./tune_quants.sh` probes largest ctx **for each** `CPU_MOE_LAYERS` value (not one global ctx for all MoE). Uses `docker compose rm -sf` + `--force-recreate`.
-2. **Min context** — Q4: **65536** minimum; Q5: **32768**; Q6: **16384**; Q8: **8192**.
-3. **VRAM** — `wait_vram_stable` after load; pick **≥85% GPU VRAM** with best tok/s; else highest VRAM; else best tok/s.
-4. **Bad run signal** — If all MoE points show the same ~15 GB VRAM, the run is stale (old bug: single probe at 262144 without per-MoE).
-
-Empirical Q4 sweep (fixed **ctx=65536**, force-recreate, 2026-05-28) — see also `eval-results/moe-tune-summary.md`:
-
-| `CPU_MOE_LAYERS` | GPU VRAM | tok/s (32 tok) |
-|------------------|----------|----------------|
-| **28** | 22573 MiB (~92%) | **35.8** |
-| 32 | 18869 MiB (~77%) | 34.1 |
-| 36 | 15165 MiB (~62%) | 32.4 |
-
-Higher `n-cpu-moe` pushes experts to **host RAM**; GPU fill drops by design.
+1. **Per-MoE max context** — `./tune_quants.sh` probes the largest ctx **for each** `CPU_MOE_LAYERS` value and evaluates the current grid at `32k/64k/128k/256k` context windows.
+2. **MoE search space** — sweep all sensible even `CPU_MOE_LAYERS` values that still keep a minimum number of active experts on GPU.
+3. **Selection rule** — prefer the best tok/s among points that meet the target VRAM band; otherwise fall back to highest VRAM, then best tok/s.
+4. **Bad run signal** — if every MoE point reports the same VRAM footprint, treat it as stale or misloaded.
 
 ## Per-quant recommendations
 
@@ -55,22 +45,22 @@ Copy into `.env` for the quant you are serving. Regenerate with `./tune_quants.s
 
 <!-- TUNE_QUANTS:START -->
 
-Updated: 2026-05-29 — full grid sweep `grid-sweep-20260529-122108`; Q8 add-on `grid-sweep-20260529-150326`
+Updated: 2026-05-29 — full grid sweep and Q8 recheck
 
-| Quant | CPU_MOE | CONTEXT | Note |
-|-------|---------|---------|------|
-| Q4 | **28** | **262144** | Best Q4 grid point: **44.60 wall tok/s**, 52.64 decode tok/s, 26.6 GiB RAM, 97.8% VRAM. Same moe=28 won 32k/64k/128k too. |
-| Q5 | **32** | **65536** | Best Q5 grid point by tok/s: **36.51 wall tok/s**, 42.76 decode tok/s, 36.0 GiB RAM, 90.2% VRAM. At 256k: moe=32, 36.49 tok/s, 96.1% VRAM. |
-| Q6 | **34** | **32768** | Best Q6 32k point: **30.43 wall tok/s**, 35.57 decode tok/s, 47.0 GiB RAM, 97.3% VRAM. For 64k/128k/256k use moe=36. |
-| Q8 | **38** | **131072** | Best Q8 grid point by tok/s: **26.30 wall tok/s**, 30.68 decode tok/s, 61.7 GiB RAM, 90.9% VRAM. At 256k: moe=38, 25.52 tok/s, 94.8% VRAM. |
+| Quant | CPU_MOE | CONTEXT | wall tok/s | decode tok/s | RAM | VRAM |
+|-------|---------|---------|------------|--------------|-----|------|
+| Q4 | **28** | **262144** | **44.60** | 52.64 | 26.6 GiB | 97.8% |
+| Q5 | **32** | **65536** | **36.51** | 42.76 | 36.0 GiB | 90.2% |
+| Q6 | **34** | **32768** | **30.43** | 35.57 | 47.0 GiB | 97.3% |
+| Q8 | **38** | **131072** | **26.30** | 30.68 | 61.7 GiB | 90.9% |
 
 <!-- TUNE_QUANTS:END -->
 
-**Latest automated run:** newest `eval-results/tune-quants-*/recommendations.{tsv,env}` and `run.log`.
+**Latest automated run:** 2026-05-29 grid sweep; detailed `eval-results/` outputs were cleared after consolidation.
 
 ## Orchestration
 
-- Workflow scripts **re-exec in `runner`** (`AI_BOX_RUNNER=1`); Harbor in image, not host mount.
+- Workflow scripts **re-exec in `runner`** (`AI_BOX_RUNNER=1`); DeepSWE/Pier is in the image, not host mount.
 - DeepSWE/Pier is the preferred post-tuning benchmark lane. Use `mini-swe-agent`
   for pure model/quant comparisons, then a separate `codex` lane for MCP/skills
   experiments after the model settings are stable.
@@ -97,10 +87,8 @@ Updated: 2026-05-29 — full grid sweep `grid-sweep-20260529-122108`; Q8 add-on 
 
 | What | Where |
 |------|--------|
-| Q4 MoE write-up | `eval-results/moe-tune-summary.md` (on host) |
-| Per-quant tune output | `eval-results/tune-quants-*/` |
 | Scripts | `scripts/tune_quants.sh`, `scripts/light_tune.sh`, `scripts/lib/probe_context.sh` |
 
 ---
 
-*Last updated: 2026-05-29 — Q6 recommendation filled; Q5 pending; Q8 not viable with current 88g/no-mmap/mlock setup.*
+*Last updated: 2026-05-29 — full grid sweep copied in; stale eval-results cleared.*

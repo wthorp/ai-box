@@ -98,32 +98,6 @@ services:
       retries: 10
       start_period: 900s
 
-  bench:
-    build: ./bench
-    image: ai-box-bench:latest
-    profiles:
-      - tools
-
-    network_mode: host
-
-    depends_on:
-      turboquant:
-        condition: service_healthy
-
-    volumes:
-      - ${EVAL_RESULTS_DIR:-./eval-results}:/bench/aider/tmp
-
-    environment:
-      - OPENAI_API_BASE=http://localhost:8080/v1
-      - OPENAI_API_KEY=notneeded
-
-    # One-shot runner — no restart, no healthcheck.
-    # Usage: docker compose run --rm bench <run-name> [flags]
-    # Example:
-    #   docker compose run --rm bench q4-baseline \
-    #     --model openai/local --languages python,go,rust,javascript \
-    #     --edit-format whole --threads 1
-
   runner:
     build: ./runner
     image: ai-box-runner:latest
