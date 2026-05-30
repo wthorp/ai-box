@@ -93,6 +93,7 @@ the default inference stack. Invoke it explicitly with
 |--------|---------|
 | `start.sh` | VRAM-aware `CPU_MOE_LAYERS` / `CONTEXT_SIZE`, then `docker compose up` |
 | `deepswe-run.sh` | DeepSWE/Pier run against the loaded local endpoint |
+| `deepswe-sweep.sh` | Fail-fast DeepSWE sweep across Q4..Q8 and descending CPU MoE |
 | `light_tune.sh` | Quick `--n-cpu-moe` sweep (tok/s, VRAM, mlock) |
 | `tune_quants.sh` | Ideal `CPU_MOE_LAYERS` + `CONTEXT_SIZE` per Q4/Q5/Q6/Q8 |
 | `diagnose.sh` | MoE checklist snapshot (GPU, swap, sysctl, paging) |
@@ -134,6 +135,8 @@ Keep those as separate result lanes:
 
 - **Quant lane:** `mini-swe-agent`, no MCP/skills, same DeepSWE subset.
 - **Agent lane:** `codex`, then codex plus MCP/skills, same subset and model.
+- **Fail-fast lane:** `deepswe-sweep.sh`, append-only TSV, stops on the first
+  DeepSWE failure or incomplete run.
 
 ## 5 — rotorquant
 

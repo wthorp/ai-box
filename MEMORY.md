@@ -87,7 +87,7 @@ Updated: 2026-05-29 — full grid sweep and Q8 recheck
 
 | What | Where |
 |------|--------|
-| Scripts | `scripts/tune_quants.sh`, `scripts/light_tune.sh`, `scripts/lib/probe_context.sh` |
+| Scripts | `scripts/tune_quants.sh`, `scripts/light_tune.sh`, `scripts/deepswe-sweep.sh`, `scripts/lib/probe_context.sh` |
 
 ---
 
