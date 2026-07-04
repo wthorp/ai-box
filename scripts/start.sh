@@ -1,8 +1,8 @@
 #!/bin/bash
-# Start turboquant (or rotorquant) with VRAM-optimal params.
+# Start rotorquant with VRAM-optimal params.
 #
 # Usage: ./start.sh [service] [min_ctx]
-#   service  — turboquant (default) or rotorquant
+#   service  — inference service name (default: rotorquant)
 #   min_ctx  — minimum acceptable context window (default: 65536; fills ~24GB VRAM)
 #
 # Algorithm: walk from all-GPU toward all-CPU; stop at the first
@@ -13,7 +13,7 @@
 #   MOE_MIB_PER_LAYER: measured from nvidia-smi (16092 MiB used at CPU_MOE=35,
 #                       CONTEXT=65536) — (16092 - 3228 KV - 800 non-MoE) / 13
 #   NON_MOE_MIB:       residual after MoE + KV — attention, embed, norms, CUDA
-#   KV_PER_TOKEN_MIB:  3228 MiB / 65536 tokens (turbo4 K + turbo3 V, 48 layers)
+#   KV_PER_TOKEN_MIB:  3228 MiB / 65536 tokens (planar4 K + planar3 V, 48 layers)
 #   If you change --cache-type-k/v, re-measure and update KV_PER_TOKEN_MIB.
 
 if [[ -z "${AI_BOX_RUNNER:-}" ]]; then
@@ -27,7 +27,7 @@ AI_BOX="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$AI_BOX"
 source "${AI_BOX}/scripts/lib/env.sh"
 
-SERVICE=${1:-turboquant}
+SERVICE=${1:-rotorquant}
 MIN_CTX=${2:-65536}
 MODEL_FILE=$(env_value MODEL_FILE .env)
 MODELS_DIR=$(env_value MODELS_DIR .env)

@@ -34,10 +34,10 @@ section "Sysctl (inference)"
 sysctl vm.swappiness vm.vfs_cache_pressure vm.dirty_ratio vm.dirty_background_ratio 2>/dev/null || true
 
 section "Docker inference services"
-docker compose ps turboquant rotorquant 2>/dev/null || true
+docker compose ps rotorquant 2>/dev/null || true
 
-section "turboquant health"
-curl -sf http://localhost:8080/health 2>/dev/null && echo || echo "turboquant not healthy"
+section "rotorquant health"
+curl -sf http://localhost:8080/health 2>/dev/null && echo || echo "rotorquant not healthy"
 
 section "llama-server mlock (host PID)"
 pid=$(pgrep -f 'llama-server.*--port 8080' 2>/dev/null | head -1 || true)
@@ -46,11 +46,11 @@ if [[ -n "$pid" ]]; then
   grep -E '^(Name|VmRSS|Mlocked):' "/proc/${pid}/status" "/proc/${pid}/smaps_rollup" 2>/dev/null \
     | head -10 || true
 else
-  echo "no turboquant llama-server process on host"
+  echo "no rotorquant llama-server process on host"
 fi
 
 section "Paging (5s vmstat — si/so should stay ~0)"
 vmstat 1 5 2>/dev/null || echo "vmstat not available"
 
 echo ""
-echo "Monitor live: nvtop | watch -n1 nvidia-smi | docker compose logs -f turboquant"
+echo "Monitor live: nvtop | watch -n1 nvidia-smi | docker compose logs -f rotorquant"

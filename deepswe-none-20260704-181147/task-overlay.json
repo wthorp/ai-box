@@ -1,0 +1,6 @@
+{
+  "source_task_path": "/data/ai/deep-swe/tasks",
+  "overlay_task_path": "deepswe-none-20260704-181147/mcp-task-overlay",
+  "harden_rewards": true,
+  "mcp_servers": []
+}

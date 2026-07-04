@@ -31,7 +31,7 @@ compose() {
 source "${AI_BOX}/scripts/lib/probe_context.sh"
 source "${AI_BOX}/scripts/lib/models.sh"
 
-SERVICE=turboquant
+SERVICE=rotorquant
 PORT=8080
 QUANT_LIST="Q4,Q5,Q6,Q8"
 MOE_LIST="20,24,28,32,36,40"

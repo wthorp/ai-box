@@ -7,8 +7,8 @@ One bootstrap script sets up the host; Docker Compose runs the services.
 
 | Service | Description |
 |---------|-------------|
-| `turboquant` | llama.cpp fork with turbo KV-cache quantisation (`turbo2/3/4`) and `--n-cpu-moe` for MoE CPU offload |
-| `rotorquant` | llama.cpp fork with planar/iso KV-cache compression (28% faster decode, better perplexity than turbo) — opt-in via `--profile rotorquant` |
+| `rotorquant` | llama.cpp fork with planar/iso KV-cache compression and `--n-cpu-moe` for MoE CPU offload |
+| `tabbyapi` | Optional TabbyAPI OpenAI-compatible server for EXL3 directory models |
 
 ## Hardware
 
@@ -62,6 +62,11 @@ $EDITOR .env          # set MODELS_DIR, MODEL_FILE, etc.
 | `EVAL_RESULTS_DIR` | `./eval-results` | Benchmark and smoke-test output directory |
 | `DEEPSWE_DIR` | `/data/ai/deep-swe` | Optional host checkout of `datacurve-ai/deep-swe` for Pier runs |
 | `UV_PYTHON_CACHE_DIR` | `~/.local/share/uv/python` | Optional host uv cache for TB task containers (faster cold starts) |
+| `TABBY_MODEL_NAME` | `gemma-4-31b-dense-exl3` | Optional TabbyAPI model directory under `MODELS_DIR` |
+| `TABBY_CONTEXT_SIZE` | `32768` | Optional TabbyAPI max sequence/cache size for EXL3 runs |
+| `TABBY_GPU_SPLIT` | `23.0` | Manual single-GPU VRAM budget in GB for 24 GB cards |
+| `TABBY_CACHE_MODE` | `Q8` | 8-bit KV cache alias for EXL3 runs |
+| `TABBY_OVERRIDE_PRESET` | `qsa_coding` | Generated sampler fallback preset for clients that omit sampling params |
 
 ## 3 — Start
 
@@ -76,8 +81,53 @@ docker compose up -d
 curl http://localhost:8080/health
 
 # Logs
-docker compose logs -f turboquant
+docker compose logs -f rotorquant
 ```
+
+### TabbyAPI EXL3 backend
+
+TabbyAPI is available as an alternative OpenAI-compatible backend for EXL3
+directory models under `/data/ai/models`, such as `gemma-4-31b-dense-exl3` and
+the two MoE quant directories `gemma-4-moe-exl3/gemma-4-moe-4.10bpw` and
+`gemma-4-moe-exl3/gemma-4-moe-5.10bpw`, plus
+`qwen3-coder-next-4.0bpw`.
+
+```bash
+# Start one EXL3 model on port 5000.
+TABBY_MODEL_NAME=gemma-4-31b-dense-exl3 \
+TABBY_CONTEXT_SIZE=32768 \
+docker compose --profile tabby up -d tabbyapi
+
+curl http://localhost:5000/v1/models
+
+# Run the existing DeepSWE path against TabbyAPI instead of rotorquant/Qwen.
+INFERENCE_SERVICE=tabbyapi \
+./deepswe-run.sh --agent mini-swe-agent --model openai/local --n-tasks 1 --sample-seed 0
+
+# Run the original mini-swe-agent benchmark lane with Sverklo skills available.
+INFERENCE_SERVICE=tabbyapi \
+./deepswe-run.sh \
+  --agent mini-swe-agent \
+  --mcp-profile sverklo \
+  --model openai/local \
+  --n-tasks 1 \
+  --n-concurrent 1 \
+  --quiet-yes
+```
+
+The compose service generates `/app/config.yml` at startup from `TABBY_*`
+environment variables. For Gemma/Gemini-named models it defaults to
+`tool_format=gemma4`; for Qwen-named models it defaults to
+`tool_format=qwen3_coder`. TabbyAPI uses `backend=exllamav3`, a 23 GB manual
+GPU split, Q8 KV cache, and a generated `qsa_coding` sampler fallback preset.
+Flash attention is enabled automatically by ExLlamaV3 on supported NVIDIA GPUs
+such as RTX 3090.
+Set `OPENAI_BASE_URL=http://172.17.0.1:5000/v1` directly if you do not want to
+use `INFERENCE_SERVICE=tabbyapi`.
+
+The sweep aliases for the three local Gemma options are
+`GEMMA4_DENSE_EXL3`, `GEMMA4_MOE_410_EXL3`, and `GEMMA4_MOE_510_EXL3`.
+The Qwen EXL3 alias is `QWEN3_CODER_NEXT_EXL3`.
 
 ### Orchestration scripts (run in Docker)
 
@@ -131,25 +181,66 @@ sandbox config is explicit and reproducible:
 ./deepswe-run.sh --agent codex --model openai/local --n-tasks 1 --sample-seed 0
 ```
 
+MCP profiles are injected into an eval-results task overlay, leaving the
+upstream DeepSWE checkout untouched. The closest-to-baseline MCP lane keeps
+Pier's `mini-swe-agent` path and exposes MCP-backed repository skills through a
+local `skill` command in the task container. For Sverklo, use the stdio profile
+so the MCP server runs inside the live DeepSWE task container and indexes that
+trial's repo checkout:
+
+```bash
+python3 scripts/deepswe.py run \
+  --agent mini-swe-agent \
+  --mcp-profile sverklo \
+  --model openai/local \
+  --n-tasks 1 \
+  --n-concurrent 1 \
+  --quiet-yes
+```
+
+This lane does not replace the agent loop. The fixed instruction addition only
+mentions that `skill --help` is available. Skill calls and post-run progress
+signals are logged under each trial's `telemetry/` directory, and the harness
+also writes `telemetry-summary.json` at the job directory for RL analysis.
+
+`qwen-sverklo` remains available as an experimental targeted adapter, but it is
+not the controlled benchmark lane for comparing model/parameter/MCP effects.
+
+There is also an HTTP Sverklo sidecar for plumbing checks:
+
+```bash
+docker compose --profile sverklo up -d sverklo
+python3 scripts/deepswe.py sverklo-preflight
+./deepswe-run.sh --agent codex --mcp-profile sverklo-http --model openai/local --n-tasks 1 --sample-seed 0
+```
+
+The sidecar indexes `SVERKLO_PROJECT_PATH` outside the trial container, so it is
+only for connectivity tests or fixed host-side checkouts, not primary benchmark
+runs.
+
 Keep those as separate result lanes:
 
 - **Quant lane:** `mini-swe-agent`, no MCP/skills, same DeepSWE subset.
-- **Agent lane:** `codex`, then codex plus MCP/skills, same subset and model.
+- **MCP skill lane:** `mini-swe-agent`, optional Sverklo stdio MCP in the trial
+  container, same subset and same model parameters as baseline.
+- **TabbyAPI lane:** `mini-swe-agent` pointed at the `tabbyapi` service with an
+  EXL3 directory model.
+- **Compatibility lane:** `codex` plus MCP/skills, only for comparing Pier's
+  high-level agent integration.
 - **Fail-fast lane:** `deepswe-sweep.sh`, append-only TSV, stops on the first
   DeepSWE failure or incomplete run.
 
 ## 5 — rotorquant
 
-rotorquant ([scrya-com/rotorquant](https://github.com/scrya-com/rotorquant)) is a llama.cpp fork built on turboquant that replaces WHT-based KV cache compression with block-diagonal rotations:
+rotorquant ([scrya-com/rotorquant](https://github.com/scrya-com/rotorquant)) is the inference backend for this project. It provides block-diagonal KV cache compression:
 
 - `planar3/4` — 2D Givens rotations
 - `iso3/4` — 4D quaternion rotations
 
-Benchmarked at 28% faster decode and better perplexity than turbo equivalents. Runs on port 8082 and is opt-in via Docker Compose profiles.
+It runs on port 8080 as the default inference service.
 
 ```bash
-# Build and start rotorquant alongside turboquant
-docker compose --profile rotorquant up -d rotorquant
+docker compose up -d rotorquant
 ```
 
 ---
@@ -171,7 +262,7 @@ Inference containers already use the high-impact flags from the MoE checklist:
 | `--no-mmap` / `--mlock` | `docker-compose.yml` command |
 | `--fit off` | `docker-compose.yml` command; prevents silent llama.cpp setting changes during tuning |
 | `--n-cpu-moe` | `.env` / `./start.sh` (VRAM-aware) |
-| `turbo4`/`turbo3` KV cache | turboquant (planar4/3 on rotorquant) |
+| `planar4`/`planar3` KV cache | rotorquant |
 | `IPC_LOCK` + `memlock: -1` | compose `cap_add` / `ulimits` |
 | `CUDA_DEVICE_MAX_CONNECTIONS=1` | compose environment |
 

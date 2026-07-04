@@ -2,11 +2,10 @@
 # Multi-stage build: compile rotorquant (llama.cpp fork with planar/iso KV
 # cache compression) then copy into a slim CUDA runtime image.
 #
-# Source: https://github.com/johndpope/llama-cpp-turboquant
+# Source: rotorquant llama.cpp fork with planarquant KV cache.
 # Branch: feature/planarquant-kv-cache
 # Adds planar3/planar4 (2D Givens) and iso3/iso4 (quaternion) KV cache
-# compression — faster decode and better perplexity than turbo3/turbo4.
-# Inherits --n-cpu-moe for MoE expert CPU offload from turboquant base.
+# compression.
 
 # ── Stage 1: builder ─────────────────────────────────────────────────────────
 FROM nvidia/cuda:13.1.2-devel-ubuntu24.04 AS builder
@@ -23,9 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 RUN git clone --depth=1 \
     -b feature/planarquant-kv-cache \
-    https://github.com/johndpope/llama-cpp-turboquant.git . \
-    && sed -i 's/extern "C" GGML_API int turbo3_cpu_wht_group_size/GGML_API int turbo3_cpu_wht_group_size/' \
-       ggml/src/ggml-cpu/ops.cpp
+    https://github.com/scrya-com/rotorquant.git .
 
 RUN cmake -B build -G Ninja \
         -DGGML_CUDA=ON \
@@ -54,5 +51,5 @@ RUN ln -s /usr/local/lib/rotorquant/llama-server /usr/local/bin/llama-server \
 
 ENV MALLOC_ARENA_MAX=2
 
-EXPOSE 8082
+EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/llama-server"]

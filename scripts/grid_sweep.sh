@@ -34,7 +34,7 @@ compose() {
   MODELS_DIR="${COMPOSE_MODELS_DIR:-${MODELS_DIR:-/data/ai/models}}" docker compose "$@"
 }
 
-SERVICE=turboquant
+SERVICE=rotorquant
 PORT=8080
 QUANT_LIST="Q4,Q5,Q6"
 CTX_LIST="32768,65536,131072,262144"
@@ -55,8 +55,6 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
 done
-
-[[ "$SERVICE" == "rotorquant" && "$PORT" == "8080" ]] && PORT=8082
 
 RESULTS="${EVAL_RESULTS_DIR:-/eval-results}/grid-sweep-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RESULTS"

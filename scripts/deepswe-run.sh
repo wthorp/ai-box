@@ -1,19 +1,24 @@
 #!/bin/bash
-# Run DeepSWE through Pier against the currently loaded local OpenAI-compatible
-# endpoint. Use mini-swe-agent for quant/model comparisons; use codex later for
-# full agent + MCP/skills experiments.
-#
-# Usage:
-#   ./deepswe-run.sh --n-tasks 5 --sample-seed 0
-#   ./deepswe-run.sh --agent codex --model openai/local --n-tasks 1
+# Compatibility wrapper for the Python DeepSWE harness.
 
 if [[ -z "${AI_BOX_RUNNER:-}" ]]; then
   ROOT="$(cd "$(dirname "$0")/.." && pwd)"
   cd "$ROOT"
+  RUNNER_ENV=(
+    -e AI_BOX_RUNNER=1
+    -e OPENAI_API_KEY="${OPENAI_API_KEY:-notneeded}"
+    -e OPENAI_BASE_URL="${OPENAI_BASE_URL:-}"
+    -e QWEN_BASE_URL="${QWEN_BASE_URL:-}"
+    -e INFERENCE_SERVICE="${INFERENCE_SERVICE:-}"
+    -e INFERENCE_PORT="${INFERENCE_PORT:-}"
+    -e EVAL_RESULTS_DIR="${EVAL_RESULTS_DIR:-}"
+  )
+  while IFS='=' read -r name _; do
+    [[ "$name" == QSA_* ]] || continue
+    RUNNER_ENV+=(-e "$name=${!name}")
+  done < <(env)
   exec docker compose run --rm \
-    -e AI_BOX_RUNNER=1 \
-    -e OPENAI_API_KEY="${OPENAI_API_KEY:-notneeded}" \
-    -e OPENAI_BASE_URL="${OPENAI_BASE_URL:-}" \
+    "${RUNNER_ENV[@]}" \
     runner scripts/deepswe-run.sh "$@"
 fi
 
@@ -22,42 +27,15 @@ set -euo pipefail
 AI_BOX="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$AI_BOX"
 
-AGENT=mini-swe-agent
-AGENT_IMPORT_PATH=""
-MODEL=openai/local
-TASK_PATH="${DEEPSWE_DIR:-/deep-swe}/tasks"
-EXTRA_ARGS=()
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --agent) AGENT="$2"; shift 2 ;;
-    --agent-import-path) AGENT_IMPORT_PATH="$2"; shift 2 ;;
-    --model) MODEL="$2"; shift 2 ;;
-    --path) TASK_PATH="$2"; shift 2 ;;
-    *) EXTRA_ARGS+=("$1"); shift ;;
-  esac
-done
-
-if [[ ! -d "$TASK_PATH" ]]; then
-  echo "ERROR: DeepSWE tasks not found at $TASK_PATH" >&2
-  echo "Clone https://github.com/datacurve-ai/deep-swe to DEEPSWE_DIR on the host." >&2
-  exit 1
-fi
-
 export OPENAI_API_KEY="${OPENAI_API_KEY:-notneeded}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-http://172.17.0.1:8080/v1}"
-
-mkdir -p "${EVAL_RESULTS_DIR:-/eval-results}"
-
-pier_args=(
-  -p "$TASK_PATH" \
-  --model "$MODEL" \
-)
-if [[ -n "$AGENT_IMPORT_PATH" ]]; then
-  pier_args+=(--agent-import-path "$AGENT_IMPORT_PATH")
+if [[ "${INFERENCE_SERVICE:-}" == "tabbyapi" ]]; then
+  INFERENCE_PORT="${INFERENCE_PORT:-5000}"
 else
-  pier_args+=(--agent "$AGENT")
+  INFERENCE_PORT="${INFERENCE_PORT:-8080}"
 fi
-pier_args+=("${EXTRA_ARGS[@]}")
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-http://172.17.0.1:${INFERENCE_PORT}/v1}"
+if [[ "${INFERENCE_SERVICE:-}" == "tabbyapi" ]]; then
+  export QWEN_BASE_URL="${QWEN_BASE_URL:-$OPENAI_BASE_URL}"
+fi
 
-pier run "${pier_args[@]}"
+exec python3 scripts/deepswe.py run "$@"

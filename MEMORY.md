@@ -24,10 +24,10 @@ benchmarks or `./tune_quants.sh` runs. Machine-readable outputs also land under
 
 Paths are defined in `scripts/lib/models.sh`.
 
-## Inference defaults (turboquant)
+## Inference defaults (rotorquant)
 
 - **Port** 8080, **`-ngl 999`**, **`--no-mmap`**, **`--mlock`**
-- KV: `--cache-type-k turbo4`, `--cache-type-v turbo3`
+- KV: `--cache-type-k planar4`, `--cache-type-v planar3`
 - MoE offload: `--n-cpu-moe` ← `.env` `CPU_MOE_LAYERS`
 - Context: `-c` ← `.env` `CONTEXT_SIZE`
 - Compose: `IPC_LOCK`, `memlock: -1`, host network/ipc, `CUDA_DEVICE_MAX_CONNECTIONS=1`, `GGML_CUDA_FORCE_MMQ=1`
@@ -80,8 +80,8 @@ Updated: 2026-05-29 — full grid sweep and Q8 recheck
 - `CPU_MOE_LAYERS=35` in `.env.example` is a generic default; **28** is better for Q4 @ ~65k ctx on 3090.
 - Host sysctl may still be defaults until `sudo bash setup.sh` is run.
 - Use compose project **`ai-box`** consistently if multiple checkouts exist.
-- **`runner` sets `MODELS_DIR=/models`** — tuning scripts must re-export `MODELS_DIR` from `.env` before nested `docker compose` or turboquant mounts `/models` (empty) on the host.
-- Stop **`workspace-turboquant`** if present; it competes for port 8080 / GPU with `ai-box-turboquant`.
+- **`runner` sets `MODELS_DIR=/models`** — tuning scripts must re-export `MODELS_DIR` from `.env` before nested `docker compose` or rotorquant mounts `/models` (empty) on the host.
+- Stop other inference containers if present; they can compete for port 8080 / GPU with `ai-box-rotorquant`.
 
 ## Related paths
 

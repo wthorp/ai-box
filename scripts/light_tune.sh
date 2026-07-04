@@ -28,7 +28,7 @@ compose() {
 }
 source "${AI_BOX}/scripts/lib/probe_context.sh"
 
-SERVICE=turboquant
+SERVICE=rotorquant
 PORT=8080
 MOE_LIST="34,35,36,37"
 CTX=""              # empty = probe max per moe
@@ -51,8 +51,6 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
-
-[[ "$SERVICE" == "rotorquant" && "$PORT" == "8080" ]] && PORT=8082
 
 export ALLOW_SMALL_CTX
 export MODEL_FILE
